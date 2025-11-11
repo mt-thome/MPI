@@ -1,0 +1,53 @@
+# Executáveis
+sequencial
+main_mpi
+*.exe
+*.out
+
+# Arquivos objeto
+*.o
+*.obj
+
+# Arquivos de resultado temporários
+results/*_tmp.txt
+results/resultado_*.txt
+
+# Entradas geradas (manter apenas as de exemplo)
+data/entrada_100x100.txt
+data/entrada_500x500.txt
+data/entrada_1000x1000.txt
+data/entrada_*x*.txt
+!data/entrada_20x20.txt
+
+# Arquivos de backup
+*~
+*.bak
+*.swp
+*.swo
+*#
+
+# Diretórios de build
+build/
+bin/
+
+# Arquivos do sistema
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.sublime-*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Logs
+*.log
+
+# Documentação gerada
+docs/html/
+docs/latex/
