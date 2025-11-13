@@ -1,0 +1,3 @@
+Total de mortos: 5
+Total de sobreviventes: 7
+Tempo de execução: 0.000187 segundos

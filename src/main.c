@@ -12,137 +12,144 @@
 #define MORTO_ANTERIOR -3
 
 typedef struct {
-    int **matriz;
+    int **matrix;
     int N;  
     int M;  
-    int linhas_locais;  // linhas que este processo controla
-    int inicio_linha;   // primeira linha deste processo na matriz global
-} Regiao;
+    int local_lines;  
+    int first_line;   
+} block;
 
 // Função para alocar a matriz
-int** alocar_matriz(int N, int M) {
-    int **matriz = (int **)malloc(N * sizeof(int *));
+int** alloc_matrix(int N, int M) {
+    int **matrix = (int **)malloc(N * sizeof(int *));
     for (int i = 0; i < N; i++) {
-        matriz[i] = (int *)malloc(M * sizeof(int));
+        matrix[i] = (int *)malloc(M * sizeof(int));
     }
-    return matriz;
+    return matrix;
 }
 
 // Função para liberar a matriz
-void liberar_matriz(int **matriz, int N) {
+void free_matrix(int **matrix, int N) {
     for (int i = 0; i < N; i++) {
-        free(matriz[i]);
+        free(matrix[i]);
     }
-    free(matriz);
+    free(matrix);
 }
 
-// Função para ler a região do arquivo (apenas processo 0)
-Regiao ler_entrada(const char *arquivo) {
-    FILE *fp = fopen(arquivo, "r");
+// Função para ler a região do arquivo
+block read_in(const char *file_in) {
+    FILE *fp = fopen(file_in, "r");
     if (!fp) {
-        fprintf(stderr, "Erro ao abrir arquivo %s\n", arquivo);
+        fprintf(stderr, "Erro ao abrir arquivo %s\n", file_in);
         exit(1);
     }
     
-    Regiao regiao;
-    fscanf(fp, "%d %d", &regiao.N, &regiao.M);
+    block region;
+    if (fscanf(fp, "%d %d", &region.N, &region.M) != 2) {
+        fprintf(stderr, "Erro ao ler dimensões do arquivo\n");
+        fclose(fp);
+        exit(1);
+    }
     
-    regiao.matriz = alocar_matriz(regiao.N, regiao.M);
+    region.matrix = alloc_matrix(region.N, region.M);
     
-    for (int i = 0; i < regiao.N; i++) {
-        for (int j = 0; j < regiao.M; j++) {
-            fscanf(fp, "%d", &regiao.matriz[i][j]);
+    for (int i = 0; i < region.N; i++) {
+        for (int j = 0; j < region.M; j++) {
+            if (fscanf(fp, "%d", &region.matrix[i][j]) != 1) {
+                fprintf(stderr, "Erro ao ler valor na posição [%d][%d]\n", i, j);
+                fclose(fp);
+                exit(1);
+            }
         }
     }
     
     fclose(fp);
-    return regiao;
+    return region;
 }
 
 // Verifica se há contaminado ou morto na vizinhança
-int tem_contaminado_vizinho(int **matriz, int linhas, int M, int i, int j) {
+int has_contaminated_neighbor(int **matrix, int lines, int M, int i, int j) {
     // Vizinho acima
-    if (i > 0 && (matriz[i-1][j] == CONTAMINADO || matriz[i-1][j] == MORTO || matriz[i-1][j] == MORTO_ANTERIOR))
+    if (i > 0 && (matrix[i-1][j] == CONTAMINADO || matrix[i-1][j] == MORTO || matrix[i-1][j] == MORTO_ANTERIOR))
         return 1;
     // Vizinho abaixo
-    if (i < linhas-1 && (matriz[i+1][j] == CONTAMINADO || matriz[i+1][j] == MORTO || matriz[i+1][j] == MORTO_ANTERIOR))
+    if (i < lines-1 && (matrix[i+1][j] == CONTAMINADO || matrix[i+1][j] == MORTO || matrix[i+1][j] == MORTO_ANTERIOR))
         return 1;
     // Vizinho esquerda
-    if (j > 0 && (matriz[i][j-1] == CONTAMINADO || matriz[i][j-1] == MORTO || matriz[i][j-1] == MORTO_ANTERIOR))
+    if (j > 0 && (matrix[i][j-1] == CONTAMINADO || matrix[i][j-1] == MORTO || matrix[i][j-1] == MORTO_ANTERIOR))
         return 1;
     // Vizinho direita
-    if (j < M-1 && (matriz[i][j+1] == CONTAMINADO || matriz[i][j+1] == MORTO || matriz[i][j+1] == MORTO_ANTERIOR))
+    if (j < M-1 && (matrix[i][j+1] == CONTAMINADO || matrix[i][j+1] == MORTO || matrix[i][j+1] == MORTO_ANTERIOR))
         return 1;
-    
     return 0;
 }
 
 // Aplica as regras da simulação na região local
-void simular_iteracao_local(int **matriz, int **nova_matriz, int linhas, int M) {
-    for (int i = 0; i < linhas; i++) {
+void simulate_local_iteration(int **matrix, int **new_matrix, int lines, int M) {
+    for (int i = 0; i < lines; i++) {
         for (int j = 0; j < M; j++) {
-            int estado_atual = matriz[i][j];
+            int current_state = matrix[i][j];
             
-            if (estado_atual == VAZIO) {
-                nova_matriz[i][j] = VAZIO;
+            if (current_state == VAZIO) {
+                new_matrix[i][j] = VAZIO;
             }
-            else if (estado_atual == SAUDAVEL) {
-                if (tem_contaminado_vizinho(matriz, linhas, M, i, j)) {
-                    nova_matriz[i][j] = CONTAMINADO;
+            else if (current_state == SAUDAVEL) {
+                if (has_contaminated_neighbor(matrix, lines, M, i, j)) {
+                    new_matrix[i][j] = CONTAMINADO;
                 } else {
-                    nova_matriz[i][j] = SAUDAVEL;
+                    new_matrix[i][j] = SAUDAVEL;
                 }
             }
-            else if (estado_atual == CONTAMINADO) {
+            else if (current_state == CONTAMINADO) {
                 int prob = rand() % 10000;
                 if (prob < 1000) {
-                    nova_matriz[i][j] = SAUDAVEL;
+                    new_matrix[i][j] = SAUDAVEL;
                 } else if (prob < 4000) {
-                    nova_matriz[i][j] = CONTAMINADO;
+                    new_matrix[i][j] = CONTAMINADO;
                 } else {
-                    nova_matriz[i][j] = MORTO;
+                    new_matrix[i][j] = MORTO;
                 }
             }
-            else if (estado_atual == MORTO) {
-                nova_matriz[i][j] = MORTO_ANTERIOR;
+            else if (current_state == MORTO) {
+                new_matrix[i][j] = MORTO_ANTERIOR;
             }
-            else if (estado_atual == MORTO_ANTERIOR) {
-                nova_matriz[i][j] = VAZIO;
+            else if (current_state == MORTO_ANTERIOR) {
+                new_matrix[i][j] = VAZIO;
             }
         }
     }
 }
 
 // Conta população local
-void contar_populacao_local(int **matriz, int linhas, int M, int *saudaveis, int *contaminados, int *mortos) {
-    *saudaveis = 0;
-    *contaminados = 0;
-    *mortos = 0;
+void count_local_population(int **matrix, int lines, int M, int *healthy, int *contaminated, int *dead) {
+    *healthy = 0;
+    *contaminated = 0;
+    *dead = 0;
     
-    for (int i = 0; i < linhas; i++) {
+    for (int i = 0; i < lines; i++) {
         for (int j = 0; j < M; j++) {
-            if (matriz[i][j] == SAUDAVEL) {
-                (*saudaveis)++;
-            } else if (matriz[i][j] == CONTAMINADO) {
-                (*contaminados)++;
-            } else if (matriz[i][j] == MORTO || matriz[i][j] == MORTO_ANTERIOR) {
-                (*mortos)++;
+            if (matrix[i][j] == SAUDAVEL) {
+                (*healthy)++;
+            } else if (matrix[i][j] == CONTAMINADO) {
+                (*contaminated)++;
+            } else if (matrix[i][j] == MORTO || matrix[i][j] == MORTO_ANTERIOR) {
+                (*dead)++;
             }
         }
     }
 }
 
 // Salva resultado
-void salvar_resultado(const char *arquivo, int total_mortos, int total_sobreviventes, double tempo) {
-    FILE *fp = fopen(arquivo, "w");
+void save_result(const char *file, int total_dead, int total_survivors, double time) {
+    FILE *fp = fopen(file, "w");
     if (!fp) {
         fprintf(stderr, "Erro ao criar arquivo de saída\n");
         return;
     }
     
-    fprintf(fp, "Total de mortos: %d\n", total_mortos);
-    fprintf(fp, "Total de sobreviventes: %d\n", total_sobreviventes);
-    fprintf(fp, "Tempo de execução: %.6f segundos\n", tempo);
+    fprintf(fp, "Total de mortos: %d\n", total_dead);
+    fprintf(fp, "Total de sobreviventes: %d\n", total_survivors);
+    fprintf(fp, "Tempo de execução: %.6f segundos\n", time);
     
     fclose(fp);
 }
@@ -150,65 +157,56 @@ void salvar_resultado(const char *arquivo, int total_mortos, int total_sobrevive
 int main(int argc, char *argv[]) {
     int rank, size;
     
-    // Inicializa MPI
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     
     if (argc < 2) {
         if (rank == 0) {
-            fprintf(stderr, "Uso: %s <arquivo_entrada> [arquivo_saida]\n", argv[0]);
+            fprintf(stderr, "Uso: %s <file_in> [file_out]\n", argv[0]);
         }
         MPI_Finalize();
         return 1;
     }
     
-    const char *arquivo_entrada = argv[1];
-    const char *arquivo_saida = argc > 2 ? argv[2] : "resultado_mpi.txt";
+    const char *file_in = argv[1];
+    const char *file_out = argc > 2 ? argv[2] : "resultado_mpi.txt";
     
-    // Inicializa gerador de números aleatórios (diferente para cada processo)
     srand(time(NULL) + rank);
     
     int N, M;
-    int **matriz_global = NULL;
+    int **global_matrix = NULL;
     
-    double tempo_inicio = MPI_Wtime();
+    double start_time = MPI_Wtime();
     
-    // Processo 0 lê a entrada
     if (rank == 0) {
-        Regiao regiao = ler_entrada(arquivo_entrada);
-        N = regiao.N;
-        M = regiao.M;
-        matriz_global = regiao.matriz;
+        block region = read_in(file_in);
+        N = region.N;
+        M = region.M;
+        global_matrix = region.matrix;
         
         printf("Iniciando simulação MPI com %d processos...\n", size);
         printf("Região: %dx%d\n", N, M);
         printf("Máximo de iterações: %d\n\n", N * M);
     }
     
-    // Broadcast das dimensões para todos os processos
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&M, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
-    // Calcula quantas linhas cada processo vai processar
-    int linhas_por_processo = N / size;
-    int linhas_extras = N % size;
+    int lines_per_process = N / size;
+    int extra_lines = N % size;
     
-    // Cada processo tem linhas_por_processo + (1 se rank < linhas_extras)
-    int linhas_locais = linhas_por_processo + (rank < linhas_extras ? 1 : 0);
+    int local_lines = lines_per_process + (rank < extra_lines ? 1 : 0);
     
-    // Calcula onde cada processo começa
-    int inicio_linha = rank * linhas_por_processo + (rank < linhas_extras ? rank : linhas_extras);
+    // int start_line = rank * lines_per_process + (rank < extra_lines ? rank : extra_lines);
     
-    // Aloca matriz local (com linhas de halo para vizinhos)
-    int linhas_com_halo = linhas_locais + 2;  // +2 para linhas de halo
-    int **matriz_local = alocar_matriz(linhas_com_halo, M);
-    int **nova_matriz_local = alocar_matriz(linhas_com_halo, M);
+    int halo_lines = local_lines + 2;  // +2 para linhas de halo
+    int **local_matrix = alloc_matrix(halo_lines, M);
+    int **new_local_matrix = alloc_matrix(halo_lines, M);
     
-    // Preparar para scatter
     int *sendcounts = NULL;
     int *displs = NULL;
-    int *recvbuf = (int *)malloc(linhas_locais * M * sizeof(int));
+    int *recvbuf = (int *)malloc(local_lines * M * sizeof(int));
     
     if (rank == 0) {
         sendcounts = (int *)malloc(size * sizeof(int));
@@ -216,144 +214,124 @@ int main(int argc, char *argv[]) {
         
         int offset = 0;
         for (int i = 0; i < size; i++) {
-            int linhas = linhas_por_processo + (i < linhas_extras ? 1 : 0);
-            sendcounts[i] = linhas * M;
+            int lines = lines_per_process + (i < extra_lines ? 1 : 0);
+            sendcounts[i] = lines * M;
             displs[i] = offset;
             offset += sendcounts[i];
         }
     }
     
-    int max_iteracoes = N * M;
-    int iteracao = 0;
-    int continuar = 1;
+    int max_iterations = N * M;
+    int iteration = 0;
+    int continue_simulation = 1;
     
-    while (continuar && iteracao < max_iteracoes) {
-        // Distribui dados do processo 0 para todos
+    while (continue_simulation && iteration < max_iterations) {
         if (rank == 0) {
-            // Converte matriz 2D em array 1D para scatter
             int *buffer = (int *)malloc(N * M * sizeof(int));
             for (int i = 0; i < N; i++) {
                 for (int j = 0; j < M; j++) {
-                    buffer[i * M + j] = matriz_global[i][j];
+                    buffer[i * M + j] = global_matrix[i][j];
                 }
             }
-            MPI_Scatterv(buffer, sendcounts, displs, MPI_INT, recvbuf, 
-                        linhas_locais * M, MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Scatterv(buffer, sendcounts, displs, MPI_INT, recvbuf, local_lines * M, MPI_INT, 0, MPI_COMM_WORLD);
             free(buffer);
         } else {
-            MPI_Scatterv(NULL, NULL, NULL, MPI_INT, recvbuf, 
-                        linhas_locais * M, MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Scatterv(NULL, NULL, NULL, MPI_INT, recvbuf, local_lines * M, MPI_INT, 0, MPI_COMM_WORLD);
         }
         
-        // Copia para matriz local (índice 1 a linhas_locais, deixando 0 e linhas_locais+1 para halo)
-        for (int i = 0; i < linhas_locais; i++) {
+        for (int i = 0; i < local_lines; i++) {
             for (int j = 0; j < M; j++) {
-                matriz_local[i + 1][j] = recvbuf[i * M + j];
+                local_matrix[i + 1][j] = recvbuf[i * M + j];
             }
         }
         
-        // Troca linhas de halo com vizinhos
         MPI_Request requests[4];
         int req_count = 0;
         
-        // Enviar linha superior para processo anterior e receber do processo anterior
         if (rank > 0) {
-            MPI_Isend(matriz_local[1], M, MPI_INT, rank - 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
-            MPI_Irecv(matriz_local[0], M, MPI_INT, rank - 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+            MPI_Isend(local_matrix[1], M, MPI_INT, rank - 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+            MPI_Irecv(local_matrix[0], M, MPI_INT, rank - 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
         } else {
-            // Primeira linha não tem vizinho acima
             for (int j = 0; j < M; j++) {
-                matriz_local[0][j] = VAZIO;
+                local_matrix[0][j] = VAZIO;
             }
         }
         
-        // Enviar linha inferior para próximo processo e receber do próximo processo
         if (rank < size - 1) {
-            MPI_Isend(matriz_local[linhas_locais], M, MPI_INT, rank + 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
-            MPI_Irecv(matriz_local[linhas_locais + 1], M, MPI_INT, rank + 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
+            MPI_Isend(local_matrix[local_lines], M, MPI_INT, rank + 1, 1, MPI_COMM_WORLD, &requests[req_count++]);
+            MPI_Irecv(local_matrix[local_lines + 1], M, MPI_INT, rank + 1, 0, MPI_COMM_WORLD, &requests[req_count++]);
         } else {
-            // Última linha não tem vizinho abaixo
             for (int j = 0; j < M; j++) {
-                matriz_local[linhas_locais + 1][j] = VAZIO;
+                local_matrix[local_lines + 1][j] = VAZIO;
             }
         }
         
         MPI_Waitall(req_count, requests, MPI_STATUSES_IGNORE);
         
-        // Simula a iteração localmente
-        simular_iteracao_local(matriz_local, nova_matriz_local, linhas_com_halo, M);
+        simulate_local_iteration(local_matrix, new_local_matrix, halo_lines, M);
         
-        // Copia resultado de volta (ignorando linhas de halo)
-        for (int i = 0; i < linhas_locais; i++) {
+        for (int i = 0; i < local_lines; i++) {
             for (int j = 0; j < M; j++) {
-                recvbuf[i * M + j] = nova_matriz_local[i + 1][j];
+                recvbuf[i * M + j] = new_local_matrix[i + 1][j];
             }
         }
         
-        // Reúne resultados no processo 0
         if (rank == 0) {
             int *buffer = (int *)malloc(N * M * sizeof(int));
-            MPI_Gatherv(recvbuf, linhas_locais * M, MPI_INT, buffer, sendcounts, displs, 
-                       MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Gatherv(recvbuf, local_lines * M, MPI_INT, buffer, sendcounts, displs, MPI_INT, 0, MPI_COMM_WORLD);
             
-            // Converte buffer de volta para matriz 2D
             for (int i = 0; i < N; i++) {
                 for (int j = 0; j < M; j++) {
-                    matriz_global[i][j] = buffer[i * M + j];
+                    global_matrix[i][j] = buffer[i * M + j];
                 }
             }
             free(buffer);
         } else {
-            MPI_Gatherv(recvbuf, linhas_locais * M, MPI_INT, NULL, NULL, NULL, 
-                       MPI_INT, 0, MPI_COMM_WORLD);
+            MPI_Gatherv(recvbuf, local_lines * M, MPI_INT, NULL, NULL, NULL, MPI_INT, 0, MPI_COMM_WORLD);
         }
         
-        iteracao++;
+        iteration++;
         
-        // Processo 0 verifica se deve continuar
         if (rank == 0) {
-            int saudaveis, contaminados, mortos;
-            contar_populacao_local(matriz_global, N, M, &saudaveis, &contaminados, &mortos);
+            int healthy, infected, dead;
+            count_local_population(global_matrix, N, M, &healthy, &infected, &dead);
             
-            continuar = (contaminados > 0);
+            continue_simulation = (infected > 0);
             
-            if (iteracao % 100 == 0 || iteracao == 1) { 
-                printf("Iteração %d: Saudáveis=%d, Contaminados=%d, Mortos=%d\n", iteracao, saudaveis, contaminados, mortos);
+            if (iteration % 100 == 0 || iteration == 1) { 
+                printf("Iteração %d: Saudáveis=%d, Contaminados=%d, Mortos=%d\n", iteration, healthy, infected, dead);
             }
         }
         
-        // Broadcast da decisão de continuar
-        MPI_Bcast(&continuar, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&continue_simulation, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
     
-    double tempo_fim = MPI_Wtime();
-    double tempo_execucao = tempo_fim - tempo_inicio;
+    double end_time = MPI_Wtime();
+    double execution_time = end_time - start_time;
     
-    // Processo 0 salva resultado final
     if (rank == 0) {
-        int saudaveis, contaminados, mortos;
-        contar_populacao_local(matriz_global, N, M, &saudaveis, &contaminados, &mortos);
+        int healthy, infected, dead;
+        count_local_population(global_matrix, N, M, &healthy, &infected, &dead);
         
         printf("\nSimulação finalizada!\n");
-        printf("Iterações executadas: %d\n", iteracao);
-        printf("Saudáveis: %d\n", saudaveis);
-        printf("Contaminados: %d\n", contaminados);
-        printf("Mortos: %d\n", mortos);
-        printf("Tempo de execução: %.6f segundos\n", tempo_execucao);
+        printf("Iterações executadas: %d\n", iteration);
+        printf("Saudáveis: %d\n", healthy);
+        printf("Contaminados: %d\n", infected);
+        printf("Mortos: %d\n", dead);
+        printf("Tempo de execução: %.6f segundos\n", execution_time);
         
-        int total_sobreviventes = saudaveis + contaminados;
-        salvar_resultado(arquivo_saida, mortos, total_sobreviventes, tempo_execucao);
+        int total_survivors = healthy + infected;
+        save_result(file_out, dead, total_survivors, execution_time);
         
-        printf("Resultado salvo em %s\n", arquivo_saida);
+        printf("Resultado salvo em %s\n", file_out);
         
-        liberar_matriz(matriz_global, N);
+        free_matrix(global_matrix, N);
         free(sendcounts);
         free(displs);
     }
     
-    // Libera memória
-    liberar_matriz(matriz_local, linhas_com_halo);
-    liberar_matriz(nova_matriz_local, linhas_com_halo);
+    free_matrix(local_matrix, halo_lines);
+    free_matrix(new_local_matrix, halo_lines);
     free(recvbuf);
     
     MPI_Finalize();

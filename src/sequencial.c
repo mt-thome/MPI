@@ -3,158 +3,156 @@
 #include <time.h>
 #include <string.h>
 
-// Estados possíveis
 #define VAZIO 0
 #define SAUDAVEL 1
 #define CONTAMINADO -1
 #define MORTO -2
-#define MORTO_ANTERIOR -3  // Morto na iteração anterior (ainda contamina)
+#define MORTO_ANTERIOR -3  
 
 typedef struct {
-    int **matriz;
-    int N;  // linhas
-    int M;  // colunas
-} Regiao;
+    int **matrix;
+    int N;  
+    int M;  
+} block;
 
 // Função para alocar a matriz
-int** alocar_matriz(int N, int M) {
-    int **matriz = (int **)malloc(N * sizeof(int *));
+int** allocate_matrix(int N, int M) {
+    int **matrix = (int **)malloc(N * sizeof(int *));
     for (int i = 0; i < N; i++) {
-        matriz[i] = (int *)malloc(M * sizeof(int));
+        matrix[i] = (int *)malloc(M * sizeof(int));
     }
-    return matriz;
+    return matrix;
 }
 
 // Função para liberar a matriz
-void liberar_matriz(int **matriz, int N) {
+void free_matrix(int **matrix, int N) {
     for (int i = 0; i < N; i++) {
-        free(matriz[i]);
+        free(matrix[i]);
     }
-    free(matriz);
+    free(matrix);
 }
 
 // Função para ler a região do arquivo
-Regiao ler_entrada(const char *arquivo) {
-    FILE *fp = fopen(arquivo, "r");
+block read_in(const char *file_in) {
+    FILE *fp = fopen(file_in, "r");
     if (!fp) {
-        fprintf(stderr, "Erro ao abrir arquivo %s\n", arquivo);
+        fprintf(stderr, "Erro ao abrir arquivo %s\n", file_in);
         exit(1);
     }
     
-    Regiao regiao;
-    fscanf(fp, "%d %d", &regiao.N, &regiao.M);
+    block region;
+    if (fscanf(fp, "%d %d", &region.N, &region.M) != 2) {
+        fprintf(stderr, "Erro ao ler dimensões do arquivo\n");
+        fclose(fp);
+        exit(1);
+    }
     
-    regiao.matriz = alocar_matriz(regiao.N, regiao.M);
+    region.matrix = allocate_matrix(region.N, region.M);
     
-    for (int i = 0; i < regiao.N; i++) {
-        for (int j = 0; j < regiao.M; j++) {
-            fscanf(fp, "%d", &regiao.matriz[i][j]);
+    for (int i = 0; i < region.N; i++) {
+        for (int j = 0; j < region.M; j++) {
+            if (fscanf(fp, "%d", &region.matrix[i][j]) != 1) {
+                fprintf(stderr, "Erro ao ler valor na posição [%d][%d]\n", i, j);
+                fclose(fp);
+                exit(1);
+            }
         }
     }
     
     fclose(fp);
-    return regiao;
+    return region;
 }
 
 // Verifica se há contaminado ou morto na vizinhança
-int tem_contaminado_vizinho(int **matriz, int N, int M, int i, int j) {
-    // Vizinho acima
-    if (i > 0 && (matriz[i-1][j] == CONTAMINADO || matriz[i-1][j] == MORTO || matriz[i-1][j] == MORTO_ANTERIOR))
+int has_contaminated_neighbor(int **matrix, int N, int M, int i, int j) {
+    if (i > 0 && (matrix[i-1][j] == CONTAMINADO || matrix[i-1][j] == MORTO || matrix[i-1][j] == MORTO_ANTERIOR))
         return 1;
-    // Vizinho abaixo
-    if (i < N-1 && (matriz[i+1][j] == CONTAMINADO || matriz[i+1][j] == MORTO || matriz[i+1][j] == MORTO_ANTERIOR))
+    if (i < N-1 && (matrix[i+1][j] == CONTAMINADO || matrix[i+1][j] == MORTO || matrix[i+1][j] == MORTO_ANTERIOR))
         return 1;
-    // Vizinho esquerda
-    if (j > 0 && (matriz[i][j-1] == CONTAMINADO || matriz[i][j-1] == MORTO || matriz[i][j-1] == MORTO_ANTERIOR))
+    if (j > 0 && (matrix[i][j-1] == CONTAMINADO || matrix[i][j-1] == MORTO || matrix[i][j-1] == MORTO_ANTERIOR))
         return 1;
-    // Vizinho direita
-    if (j < M-1 && (matriz[i][j+1] == CONTAMINADO || matriz[i][j+1] == MORTO || matriz[i][j+1] == MORTO_ANTERIOR))
+    if (j < M-1 && (matrix[i][j+1] == CONTAMINADO || matrix[i][j+1] == MORTO || matrix[i][j+1] == MORTO_ANTERIOR))
         return 1;
     
     return 0;
 }
 
 // Aplica as regras da simulação
-void simular_iteracao(Regiao *regiao) {
-    int **nova_matriz = alocar_matriz(regiao->N, regiao->M);
+void simulate_interation(block *region) {
+    int **new_matrix = allocate_matrix(region->N, region->M);
     
-    for (int i = 0; i < regiao->N; i++) {
-        for (int j = 0; j < regiao->M; j++) {
-            int estado_atual = regiao->matriz[i][j];
+    for (int i = 0; i < region->N; i++) {
+        for (int j = 0; j < region->M; j++) {
+            int curr = region->matrix[i][j];
             
-            if (estado_atual == VAZIO) {
-                nova_matriz[i][j] = VAZIO;
+            if (curr == VAZIO) {
+                new_matrix[i][j] = VAZIO;
             }
-            else if (estado_atual == SAUDAVEL) {
-                // Saudável pode ser contaminado se tiver vizinho contaminado/morto
-                if (tem_contaminado_vizinho(regiao->matriz, regiao->N, regiao->M, i, j)) {
-                    nova_matriz[i][j] = CONTAMINADO;
+            else if (curr == SAUDAVEL) {
+                if (has_contaminated_neighbor(region->matrix, region->N, region->M, i, j)) {
+                    new_matrix[i][j] = CONTAMINADO;
                 } else {
-                    nova_matriz[i][j] = SAUDAVEL;
+                    new_matrix[i][j] = SAUDAVEL;
                 }
             }
-            else if (estado_atual == CONTAMINADO) {
-                // Contaminado: 10% cura, 30% continua doente, 60% morre
+            else if (curr == CONTAMINADO) {
                 int prob = rand() % 10000;
-                if (prob < 1000) {  // 0-999: cura (10%)
-                    nova_matriz[i][j] = SAUDAVEL;
-                } else if (prob < 4000) {  // 1000-3999: continua doente (30%)
-                    nova_matriz[i][j] = CONTAMINADO;
-                } else {  // 4000-9999: morre (60%)
-                    nova_matriz[i][j] = MORTO;
+                if (prob < 1000) {  
+                    new_matrix[i][j] = SAUDAVEL;
+                } else if (prob < 4000) {  
+                    new_matrix[i][j] = CONTAMINADO;
+                } else {  
+                    new_matrix[i][j] = MORTO;
                 }
             }
-            else if (estado_atual == MORTO) {
-                // Morto vira MORTO_ANTERIOR (ainda contamina)
-                nova_matriz[i][j] = MORTO_ANTERIOR;
+            else if (curr == MORTO) {
+                new_matrix[i][j] = MORTO_ANTERIOR;
             }
-            else if (estado_atual == MORTO_ANTERIOR) {
-                // Morto anterior desaparece
-                nova_matriz[i][j] = VAZIO;
+            else if (curr == MORTO_ANTERIOR) {
+                new_matrix[i][j] = VAZIO;
             }
         }
     }
     
-    // Substitui a matriz antiga pela nova
-    liberar_matriz(regiao->matriz, regiao->N);
-    regiao->matriz = nova_matriz;
+    free_matrix(region->matrix, region->N);
+    region->matrix = new_matrix;
 }
 
 // Conta população
-void contar_populacao(Regiao *regiao, int *saudaveis, int *contaminados, int *mortos) {
-    *saudaveis = 0;
-    *contaminados = 0;
-    *mortos = 0;
+void count_population(block *region, int *healthy, int *contaminated, int *deads) {
+    *healthy = 0;
+    *contaminated = 0;
+    *deads = 0;
     
-    for (int i = 0; i < regiao->N; i++) {
-        for (int j = 0; j < regiao->M; j++) {
-            if (regiao->matriz[i][j] == SAUDAVEL) {
-                (*saudaveis)++;
-            } else if (regiao->matriz[i][j] == CONTAMINADO) {
-                (*contaminados)++;
-            } else if (regiao->matriz[i][j] == MORTO || regiao->matriz[i][j] == MORTO_ANTERIOR) {
-                (*mortos)++;
+    for (int i = 0; i < region->N; i++) {
+        for (int j = 0; j < region->M; j++) {
+            if (region->matrix[i][j] == SAUDAVEL) {
+                (*healthy)++;
+            } else if (region->matrix[i][j] == CONTAMINADO) {
+                (*contaminated)++;
+            } else if (region->matrix[i][j] == MORTO || region->matrix[i][j] == MORTO_ANTERIOR) {
+                (*deads)++;
             }
         }
     }
 }
 
 // Verifica se a simulação deve terminar
-int deve_continuar(int saudaveis, int contaminados) {
-    return contaminados > 0;  // Continua se ainda há contaminados
+int should_continue(int healthy, int contaminated) {
+    return contaminated > 0;
 }
 
 // Salva resultado
-void salvar_resultado(const char *arquivo, int total_mortos, int total_sobreviventes, double tempo) {
-    FILE *fp = fopen(arquivo, "w");
+void save_result(const char *file, int total_deads, int total_survivors, double time) {
+    FILE *fp = fopen(file, "w");
     if (!fp) {
         fprintf(stderr, "Erro ao criar arquivo de saída\n");
         return;
     }
     
-    fprintf(fp, "Total de mortos: %d\n", total_mortos);
-    fprintf(fp, "Total de sobreviventes: %d\n", total_sobreviventes);
-    fprintf(fp, "Tempo de execução: %.6f segundos\n", tempo);
+    fprintf(fp, "Total de mortos: %d\n", total_deads);
+    fprintf(fp, "Total de sobreviventes: %d\n", total_survivors);
+    fprintf(fp, "Tempo de execução: %.6f segundos\n", time);
     
     fclose(fp);
 }
@@ -165,54 +163,52 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    const char *arquivo_entrada = argv[1];
-    const char *arquivo_saida = argc > 2 ? argv[2] : "resultado_sequencial.txt";
+    const char *input_file = argv[1];
+    const char *output_file = argc > 2 ? argv[2] : "resultado_sequencial.txt";
     
-    // Inicializa gerador de números aleatórios
     srand(time(NULL));
     
-    // Lê a entrada
-    Regiao regiao = ler_entrada(arquivo_entrada);
+    block region = read_in(input_file);
     
-    int max_iteracoes = regiao.N * regiao.M;
-    int saudaveis, contaminados, mortos;
+    int max_iterations = region.N * region.M;
+    int healthy, contaminated, deads;
     
     printf("Iniciando simulação sequencial...\n");
-    printf("Região: %dx%d\n", regiao.N, regiao.M);
-    printf("Máximo de iterações: %d\n\n", max_iteracoes);
+    printf("Região: %dx%d\n", region.N, region.M);
+    printf("Máximo de iterações: %d\n\n", max_iterations);
     
-    clock_t inicio = clock();
+    clock_t start = clock();
     
-    int iteracao = 0;
+    int iteration = 0;
     do {
-        simular_iteracao(&regiao);
-        iteracao++;
+        simulate_interation(&region);
+        iteration++;
         
-        contar_populacao(&regiao, &saudaveis, &contaminados, &mortos);
+        count_population(&region, &healthy, &contaminated, &deads);
         
-        if (iteracao % 100 == 0 || iteracao == 1) {
+        if (iteration % 100 == 0 || iteration == 1) {
             printf("Iteração %d: Saudáveis=%d, Contaminados=%d, Mortos=%d\n", 
-                   iteracao, saudaveis, contaminados, mortos);
+                   iteration, healthy, contaminated, deads);
         }
         
-    } while (deve_continuar(saudaveis, contaminados) && iteracao < max_iteracoes);
+    } while (should_continue(healthy, contaminated) && iteration < max_iterations);
     
-    clock_t fim = clock();
-    double tempo_execucao = (double)(fim - inicio) / CLOCKS_PER_SEC;
+    clock_t end = clock();
+    double execution_time = (double)(end - start) / CLOCKS_PER_SEC;
     
     printf("\nSimulação finalizada!\n");
-    printf("Iterações executadas: %d\n", iteracao);
-    printf("Saudáveis: %d\n", saudaveis);
-    printf("Contaminados: %d\n", contaminados);
-    printf("Mortos: %d\n", mortos);
-    printf("Tempo de execução: %.6f segundos\n", tempo_execucao);
+    printf("Iterações executadas: %d\n", iteration);
+    printf("Saudáveis: %d\n", healthy);
+    printf("Contaminados: %d\n", contaminated);
+    printf("Mortos: %d\n", deads);
+    printf("Tempo de execução: %.6f segundos\n", execution_time);
     
-    int total_sobreviventes = saudaveis + contaminados;
-    salvar_resultado(arquivo_saida, mortos, total_sobreviventes, tempo_execucao);
+    int total_survivors = healthy + contaminated;
+    save_result(output_file, deads, total_survivors, execution_time);
     
-    printf("Resultado salvo em %s\n", arquivo_saida);
+    printf("Resultado salvo em %s\n", output_file);
     
-    liberar_matriz(regiao.matriz, regiao.N);
+    free_matrix(region.matrix, region.N);
     
     return 0;
 }
